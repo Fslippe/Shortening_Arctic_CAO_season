@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "von der Lippe"
+  given-names: "Filip Severin"
+  orcid: "https://orcid.org/0009-0009-3342-4655"
+title: "Shortening of the Arctic cold air outbreak season detected by a phenomenological machine learning approach"
+version: 0.1
+doi: 10.5281/zenodo.16680336
+date-released: 2025-08-01
+url: "https://doi.org/10.5281/zenodo.16680335"
