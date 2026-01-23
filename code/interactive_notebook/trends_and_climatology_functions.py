@@ -390,6 +390,102 @@ def calculate_daily_coverage_for_months(ds, years, months, region_mask=None):
     return array_list, arr
 
 
+def plot_monthly_slopes(slopes_ds, exclude_area, p_values, alpha=None, FDR=None, vval=None):
+    months = slopes_ds['month'].values
+    lons = slopes_ds['lon'].values
+    lats = slopes_ds['lat'].values
+
+    ncols = 3
+    nrows = (len(months)-2 + ncols - 1) // ncols 
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(18, nrows * 5),
+                             subplot_kw={'projection': ccrs.NorthPolarStereo()})
+
+    axes = axes.ravel()
+    idx = 0
+
+   
+
+    for month in months:
+        if month not in [6, 7]:
+            p_values_month = p_values.sel(month=month).values
+            if FDR != None:
+                flat_p_values = p_values_month[(p_values_month != 1) & np.isfinite(p_values_month)].ravel()
+
+                sorted_indices = np.argsort(flat_p_values)
+                sorted_p_values = flat_p_values[sorted_indices]
+
+                # Configuring FDR level
+                num_tests = len(sorted_p_values)
+
+                # Calculate the threshold
+                crit_thresholds = (np.arange(1, num_tests + 1) / num_tests) * FDR
+                significant = sorted_p_values <= crit_thresholds
+
+                if np.any(significant):
+                    cutoff_index = np.where(significant)[0][-1]
+                    p_value_threshold = sorted_p_values[cutoff_index]
+                else:
+                    p_value_threshold = -1
+
+                print(p_value_threshold)
+                # Create a significance mask of the same shape as the original p_values array
+                significance_mask = (p_values_month <= p_value_threshold) & (p_values_month != 1) & exclude_area
+                
+            else:
+                significant_bool = p_values_month <= alpha
+                significance_mask = np.where(~exclude_area, False, significant_bool)
+
+            significant_slopes_ds = slopes_ds.where(significance_mask).sel(month=month)
+            isfinite = np.isfinite(p_values_month)
+            # plt.figure()
+            # plt.pcolormesh(isfinite)
+            # plt.show()
+            isfinite_significance = np.where(~significance_mask & isfinite, False, True)
+            # isfinite_significance = np.where(~significance_mask, False, ~significance_mask)
+            ax = axes[idx]
+
+            slopes = slopes_ds.sel(month=month)#where(exclude_area).values
+
+            # Add map features
+            ax.coastlines()
+            if vval is None:
+                vval = np.nanmax(abs(slopes))
+            # Plot the data using lat/lon for transformation
+            # use a discrete colormap with 20 colors
+            cmap = plt.get_cmap('coolwarm', 20)
+            levels = np.arange(-vval, vval+1, 1)  # 20 intervals -> 20 colors
+            norm = BoundaryNorm(levels, ncolors=cmap.N, clip=True)
+
+            im = ax.pcolormesh(
+                lons, lats, slopes,
+                transform=ccrs.PlateCarree(), cmap=cmap, norm=norm
+            )
+
+            # stipling for the non-significant areas using scatter plot
+            ax.scatter(
+                lons[~isfinite_significance], lats[~isfinite_significance],
+                transform=ccrs.PlateCarree(), color='black', s=70, marker="x"
+            )
+
+            # Add a colorbar
+            # use calendar to give the month name
+            import calendar
+            month_name = calendar.month_name[month]
+
+            ax.set_title(f'{month_name}')
+            ax.set_facecolor("white")
+            idx += 1
+    # Remove any unused axes
+    # for i in range(len(months), len(axes)):
+    #     fig.delaxes(axes[i])
+    # Create a single horizontal colorbar spanning the bottom row of the figure
+    cbar_ax = fig.add_axes([0.12, 0.04, 0.76, 0.03])  # [left, bottom, width, height]
+    cbar = fig.colorbar(im, cax=cbar_ax, orientation='horizontal', boundaries=levels, ticks=levels[::2])
+    cbar.set_label('Change in days per month / 25 yr')
+    # Reserve space at the bottom so subplots are not overlapped by the colorbar
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    plt.show()
+
 def mk_test(data, alpha=0.95, x=None):
     y = data #*100
     if x is None:
@@ -404,7 +500,6 @@ def mk_test(data, alpha=0.95, x=None):
     # plt.show()
     # intercept =  np.median(y[mask] - ts_slope * x[mask]) 
     y_detrended = y[mask] - ts_slope * x[mask]
-
     # Autocorrelation
     acf_values = acf(y_detrended, nlags=1, fft=False)
     lag_1_ac = acf_values[1]
@@ -1174,4 +1269,4 @@ def plot_double_hist_map(x_grid, y_grid, count_list, tot_days, projection,
     fig.tight_layout(rect=(0, 0.16, 1, 0.93))
 
     # plt.tight_layout()
-    return fig, axs
+    return fig, axs 
